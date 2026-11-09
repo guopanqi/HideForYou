@@ -1,10 +1,13 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      3.0.0
+// @version      3.0.1
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
+// @license      MIT
+// @homepageURL  https://github.com/guopanqi/HideForYou
+// @supportURL   https://github.com/guopanqi/HideForYou/issues
 // @grant        none
 // @inject-into  content
 // @updateURL    https://raw.githubusercontent.com/guopanqi/HideForYou/main/hide-for-you.meta.js
@@ -270,7 +273,7 @@
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
       <div class="top"><h3>HideForYou · Settings</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p>Mobile & desktop · Saved in this browser · v3.0</p>
+      <p>Mobile & desktop · Saved in this browser · v3.0.1</p>
       <div id="options"></div>
       <div class="actions">
         <button id="focus">Focus mode</button>
