@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      3.1.0
+// @version      3.2.0
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -19,37 +19,46 @@
   'use strict';
   if (document.getElementById('xclean-root')) return;
 
-  const KEY = 'xclean-v2-settings';
-  const defaults = {
-    following: true, forYou: true, suggestions: true,
-    trends: true, grok: true, premium: true,
-    explore: false, metrics: false, sports: true, rightRecommendations: true, sidebarSearch: false, paused: false
-  };
+  const KEY = 'hideforyou-settings-v3';
+  const FOLLOWING_ONLY = Object.freeze({
+    following: true, forYou: true, rightRecommendations: true,
+    sidebarSearch: false, grok: false, premium: false,
+    explore: false, metrics: false
+  });
+  const FOCUS = Object.freeze({
+    ...FOLLOWING_ONLY, grok: true, premium: true, explore: true
+  });
+  const keys = Object.keys(FOLLOWING_ONLY);
   const labels = {
     following: 'Prefer Following', forYou: 'Hide For You',
-    suggestions: 'Hide Who to Follow', trends: 'Hide Trends',
-    grok: 'Hide Grok', premium: 'Hide Premium promos',
-    explore: 'Hide Explore', metrics: 'Hide engagement buttons',
-    sports: 'Hide sports scorecards', rightRecommendations: 'Hide right-side recommendations',
-    sidebarSearch: 'Hide right-side search'
+    rightRecommendations: 'Hide recommendations',
+    sidebarSearch: 'Hide search', grok: 'Hide Grok',
+    premium: 'Hide Premium promotions', explore: 'Hide Explore',
+    metrics: 'Hide engagement buttons'
   };
-  let prefs = { ...defaults };
+  let prefs = { ...FOLLOWING_ONLY, paused: false };
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
-    if (saved && typeof saved === 'object') prefs = { ...prefs, ...saved };
+    const current = JSON.parse(localStorage.getItem(KEY) || 'null');
+    const legacy = JSON.parse(localStorage.getItem('xclean-v2-settings') || 'null');
+    const stored = current && typeof current === 'object' ? current :
+      legacy && typeof legacy === 'object' ? legacy : null;
+    if (stored) for (const key of [...keys, 'paused']) {
+      if (typeof stored[key] === 'boolean') prefs[key] = stored[key];
+    }
   } catch (_) {}
   const save = () => {
     try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch (_) {}
+  };
+  const presetName = () => {
+    if (keys.every(k => prefs[k] === FOLLOWING_ONLY[k])) return 'following';
+    if (keys.every(k => prefs[k] === FOCUS[k])) return 'focus';
+    return 'custom';
   };
   const normalize = s => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
   const onHome = () => location.pathname === '/home' || location.pathname === '/';
   const words = {
     forYou: ['for you', '为你推荐', '為你推薦', 'おすすめ'],
     following: ['following', '正在关注', '正在關注', 'フォロー中'],
-    suggestions: ['who to follow', '推荐关注', '推薦關注', '推薦追蹤'],
-    trends: ["what's happening", 'what’s happening', 'trends for you',
-      '有什么新鲜事', '正在发生', '热门趋势', '熱門趨勢'],
-    premium: ['subscribe to premium', '订阅 premium', '訂閱 premium']
   };
   const exact = (s, list) => list.includes(normalize(s));
   const has = (s, list) => list.some(v => normalize(s).includes(v));
@@ -145,18 +154,6 @@
         (prefs.explore && path === '/explore');
       toggle(a, hide);
     });
-    document.querySelectorAll('aside h2,[data-testid="sidebarColumn"] h2,[data-testid="cellInnerDiv"] h2')
-      .forEach(h => {
-        const s = normalize(h.textContent);
-        const category = has(s, words.suggestions) ? 'suggestions'
-          : has(s, words.trends) ? 'trends'
-          : has(s, words.premium) ? 'premium' : null;
-        if (!category) return;
-        const box = h.closest('section,[data-testid="cellInnerDiv"]');
-        if (box && !box.querySelector('[data-testid="tweet"]'))
-          toggle(box, prefs[category]);
-      });
-
     // Manage the search and recommendations independently. Never hide
     // an ancestor of the search field as part of recommendations filtering.
     document.querySelectorAll('[data-testid="sidebarColumn"]').forEach(sidebar => {
@@ -213,28 +210,6 @@
         }
       });
     });
-    // Sports scorecards: match a contained NFL/NBA/etc. module,
-    // not the user's own posts or search results.
-    document.querySelectorAll(
-      '[data-testid="sidebarColumn"] h2,' +
-      '[data-testid="sidebarColumn"] [role="heading"],' +
-      'aside h2, aside [role="heading"]'
-    ).forEach(heading => {
-      if (!/^(NFL|NBA|MLB|NHL|NCAA|WNBA|MLS|Premier League)$/i.test(
-        heading.textContent.trim())) return;
-      let node = heading.parentElement;
-      let candidate = null;
-      for (let depth = 0; node && depth < 7; depth++, node = node.parentElement) {
-        if (node.matches('aside,[data-testid="sidebarColumn"]') ||
-            node.querySelector('[data-testid="tweet"]')) break;
-        const t = node.textContent || '';
-        // A full scorecard has some details, not just its title.
-        if (t.length >= 35 && t.length < 1800 &&
-            node.querySelector('button,[role="button"]')) candidate = node;
-        if (t.length >= 1800) break;
-      }
-      if (candidate && !candidate.querySelector('input[aria-label="Search query"], [data-testid="SearchBox_Search_Input"]')) toggle(candidate, prefs.sports);
-    });
     document.querySelectorAll('[data-testid="like"],[data-testid="unlike"],[data-testid="retweet"],[data-testid="unretweet"]')
       .forEach(el => toggle(el, prefs.metrics));
   }
@@ -266,6 +241,9 @@
         border-bottom:1px solid #ffffff18;padding:9px 0;gap:10px}
       input{width:19px;height:19px;accent-color:#82b7e7}
       .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+      .actions button.active{border-color:#9acbf1;background:#355572}
+      .mode-status{color:#aebeca;font-size:12px;margin:8px 0}
+      .group-note{font-size:11px;color:#93a6b6;margin:0 0 6px}
       .actions button{background:#283b4e;border:1px solid #5c7286;color:white;
         border-radius:8px;padding:10px 4px;font-size:12px}
       #pause{grid-column:span 2}
@@ -273,13 +251,14 @@
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
       <div class="top"><h3>HideForYou · Settings</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p>Mobile & desktop · Saved in this browser · v3.1.1</p>
+      <p>Mobile & desktop · Saved in this browser · v3.2</p>
       <div id="options"></div>
       <div class="actions">
-        <button id="focus">Focus mode</button>
-        <button id="light">Light mode</button>
-        <button id="pause">Pause filtering</button>
+        <button id="light" type="button">Following Only</button>
+        <button id="focus" type="button">Focus</button>
       </div>
+      <div id="mode-status" class="mode-status"></div>
+      <div class="actions"><button id="pause" type="button">Pause filtering</button></div>
     </div>`;
 
   let open = false;
@@ -381,11 +360,10 @@
     if (location.hash === '#xclean-settings') setOpen(true);
   }
   const groups = [
-    { title: 'Timeline', keys: ['following', 'forYou'] },
-    { title: 'Right sidebar', keys: ['sidebarSearch', 'rightRecommendations'] },
-    { title: 'Recommendation details', keys: ['suggestions', 'trends', 'sports'] },
-    { title: 'Navigation & promotions', keys: ['grok', 'premium', 'explore'] },
-    { title: 'Appearance', keys: ['metrics'] }
+    { title: 'Timeline', note: 'Mobile & desktop', keys: ['following', 'forYou'] },
+    { title: 'Right sidebar', note: 'Desktop browser', keys: ['rightRecommendations', 'sidebarSearch'] },
+    { title: 'Navigation', note: 'Mobile & desktop', keys: ['grok', 'premium', 'explore'] },
+    { title: 'Appearance', note: 'Mobile & desktop', keys: ['metrics'] }
   ];
   function render() {
     const container = shadow.getElementById('options');
@@ -396,6 +374,10 @@
       heading.textContent = group.title;
       heading.className = 'group-heading';
       section.append(heading);
+      const note = document.createElement('p');
+      note.className = 'group-note';
+      note.textContent = group.note;
+      section.append(note);
       for (const key of group.keys) {
         const row = document.createElement('label');
         const name = document.createElement('span');
@@ -413,14 +395,24 @@
       }
       container.append(section);
     }
+    const mode = presetName();
+    for (const [id, value] of [['light','following'],['focus','focus']]) {
+      const button = shadow.getElementById(id);
+      button.classList.toggle('active', mode === value);
+      button.setAttribute('aria-pressed', String(mode === value));
+    }
+    shadow.getElementById('mode-status').textContent =
+      mode === 'custom' ? 'Custom settings' :
+      mode === 'focus' ? 'Focus · Fewer distractions' :
+      'Following Only · No algorithmic recommendations';
     shadow.getElementById('pause').textContent = prefs.paused ? 'Resume filtering' : 'Pause filtering';
   }
   shadow.getElementById('focus').addEventListener('click', () => {
-    prefs = {...defaults, explore:true, metrics:false};
+    prefs = { ...FOCUS, paused: false };
     save(); render(); apply();
   });
   shadow.getElementById('light').addEventListener('click', () => {
-    prefs = {...defaults, suggestions:false, trends:false, grok:false, premium:false};
+    prefs = { ...FOLLOWING_ONLY, paused: false };
     save(); render(); apply();
   });
   shadow.getElementById('pause').addEventListener('click', () => {
