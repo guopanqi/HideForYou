@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      2.9.0
+// @version      3.0.0
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -253,6 +253,9 @@
         font:14px -apple-system,BlinkMacSystemFont,sans-serif;
         box-shadow:0 8px 32px #0008}
       h3{margin:0 0 4px;font-size:17px}
+      .group-heading{margin:17px 0 3px;color:#aabdc9;font-size:11px;
+        font-weight:700;text-transform:uppercase;letter-spacing:.09em}
+      #options section:first-child .group-heading{margin-top:8px}
       p{margin:0 0 12px;color:#b3c2cd;font-size:12px}
       .top{display:flex;justify-content:space-between;align-items:center}
       #close{border:0;color:#fff;background:transparent;font-size:24px;padding:0 4px}
@@ -267,7 +270,7 @@
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
       <div class="top"><h3>HideForYou · Settings</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p>Mobile & desktop · Saved in this browser · v2.9</p>
+      <p>Mobile & desktop · Saved in this browser · v3.0</p>
       <div id="options"></div>
       <div class="actions">
         <button id="focus">Focus mode</button>
@@ -288,85 +291,111 @@
     if (event.key === 'Escape' && open) setOpen(false);
   });
 
-  // Keep the entry inside X's navigation surfaces. Mobile X opens a
-  // separate account drawer; never add a floating on-page launcher.
+  // Insert only after X's own "Settings and privacy" menu item.
+  // Never attach anything to the mobile bottom tab bar or primary nav.
   function insertSettingsLink() {
-    const selectors = [
-      'nav[aria-label="Primary"]',
-      'nav[aria-label="Primary navigation"]',
-      'nav[aria-label="主要"]',
-      '[data-testid="SideNav"]',
-      '[data-testid="SideNav_AccountSwitcher_Button"]',
-      '[data-testid="AppTabBar"]',
-      '[role="dialog"] nav',
-      '[role="menu"]'
-    ];
-    const targets = new Set();
-    for (const selector of selectors) {
-      document.querySelectorAll(selector).forEach(el => {
-        if (el.closest('#xclean-root')) return;
-        // Avoid adding the entry to the bottom mobile tab bar.
-        if (el.matches('[data-testid="AppTabBar"]')) return;
-        if (el.matches('[data-testid="SideNav_AccountSwitcher_Button"]')) {
-          const parent = el.closest('nav,[role="menu"],[role="dialog"]');
-          if (parent) targets.add(parent);
-          return;
-        }
-        targets.add(el);
-      });
-    }
-    // The mobile account drawer often has no stable data-testid.
-    // Look for a visible panel containing account navigation items.
-    document.querySelectorAll('[role="dialog"],[data-testid="sheetDialog"],aside').forEach(panel => {
-      const links = [...panel.querySelectorAll('a[href]')];
-      const paths = links.map(a => {
-        try { return new URL(a.href).pathname; } catch (_) { return ''; }
-      });
-      if (paths.some(p => /^\/(profile|lists|bookmarks|settings)(\/|$)/.test(p))) {
-        const nav = panel.querySelector('nav') || panel;
-        targets.add(nav);
-      }
+    // Remove any links accidentally left by an earlier UI version.
+    document.querySelectorAll('[data-hideforyou-settings]').forEach(el => {
+      if (el.getAttribute('data-hideforyou-version') !== '3') el.remove();
     });
-    for (const target of targets) {
-      if (!target.isConnected || target.querySelector('[data-hideforyou-settings]')) continue;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.setAttribute('data-hideforyou-settings', 'true');
-      button.setAttribute('aria-label', 'HideForYou settings');
-      button.style.cssText = 'display:flex;align-items:center;gap:12px;' +
-        'width:100%;min-height:44px;padding:10px 14px;border:0;' +
-        'border-radius:8px;background:transparent;color:inherit;' +
-        'font:inherit;font-size:15px;text-align:left;cursor:pointer';
-      button.textContent = '⚙  HideForYou settings';
-      button.addEventListener('click', event => {
+
+    const validSettings = el => {
+      if (el.closest('#xclean-root,[data-testid="AppTabBar"],[role="tablist"]')) return false;
+      if (el.closest('[data-hideforyou-settings]')) return false;
+      const text = normalize(el.textContent);
+      let href = '';
+      if (el.tagName === 'A') {
+        try { href = new URL(el.href).pathname; } catch (_) {}
+      }
+      return (href === '/settings' || href === '/settings/') ||
+        /^(settings and privacy|settings & privacy|设置和隐私|設定和隱私|設定與隱私)$/.test(text);
+    };
+    const items = [...document.querySelectorAll(
+      'a[href], [role="menuitem"], [role="button"], button'
+    )].filter(validSettings);
+
+    for (const original of items) {
+      // Prefer the exact settings row, including its existing icon, spacing,
+      // fonts, hover/active styling and responsive classes.
+      if (original.nextElementSibling?.matches('[data-hideforyou-settings]')) continue;
+      const clone = original.cloneNode(true);
+      clone.removeAttribute('href');
+      clone.removeAttribute('aria-expanded');
+      clone.removeAttribute('aria-controls');
+      clone.removeAttribute('id');
+      clone.removeAttribute('data-testid');
+      clone.setAttribute('data-hideforyou-settings', 'true');
+      clone.setAttribute('data-hideforyou-version', '3');
+      clone.setAttribute('aria-label', 'HideForYou settings');
+      clone.setAttribute('role', 'button');
+      clone.setAttribute('tabindex', '0');
+      // Replace only the original label, retaining all X-native wrappers.
+      const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+      let node;
+      let replaced = false;
+      while ((node = walker.nextNode())) {
+        const value = node.nodeValue.trim();
+        if (value && /settings|设置|設定/i.test(value)) {
+          node.nodeValue = node.nodeValue.replace(value, 'HideForYou settings');
+          replaced = true;
+          break;
+        }
+      }
+      if (!replaced) {
+        const span = document.createElement('span');
+        span.textContent = 'HideForYou settings';
+        clone.append(span);
+      }
+      // Prevent the cloned X menu item's default routing and accordion action.
+      const openSettings = event => {
         event.preventDefault();
+        event.stopImmediatePropagation();
         event.stopPropagation();
         setOpen(true);
-      });
-      target.append(button);
+      };
+      clone.addEventListener('click', openSettings, true);
+      clone.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') openSettings(event);
+      }, true);
+      original.insertAdjacentElement('afterend', clone);
     }
   }
   function checkHash() {
     if (location.hash === '#xclean-settings') setOpen(true);
   }
+  const groups = [
+    { title: 'Timeline', keys: ['following', 'forYou'] },
+    { title: 'Right sidebar', keys: ['sidebarSearch', 'rightRecommendations'] },
+    { title: 'Recommendation details', keys: ['suggestions', 'trends', 'sports'] },
+    { title: 'Navigation & promotions', keys: ['grok', 'premium', 'explore'] },
+    { title: 'Appearance', keys: ['metrics'] }
+  ];
   function render() {
     const container = shadow.getElementById('options');
     container.replaceChildren();
-    Object.entries(labels).forEach(([key,label]) => {
-      const row = document.createElement('label');
-      const name = document.createElement('span');
-      name.textContent = label;
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = !!prefs[key];
-      checkbox.disabled = prefs.paused;
-      checkbox.addEventListener('change', () => {
-        prefs[key] = checkbox.checked;
-        save(); render(); apply();
-      });
-      row.append(name, checkbox);
-      container.append(row);
-    });
+    for (const group of groups) {
+      const section = document.createElement('section');
+      const heading = document.createElement('h4');
+      heading.textContent = group.title;
+      heading.className = 'group-heading';
+      section.append(heading);
+      for (const key of group.keys) {
+        const row = document.createElement('label');
+        const name = document.createElement('span');
+        name.textContent = labels[key];
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !!prefs[key];
+        checkbox.disabled = prefs.paused;
+        checkbox.addEventListener('change', () => {
+          prefs[key] = checkbox.checked;
+          save(); render(); apply();
+        });
+        row.append(name, checkbox);
+        section.append(row);
+      }
+      container.append(section);
+    }
     shadow.getElementById('pause').textContent = prefs.paused ? 'Resume filtering' : 'Pause filtering';
   }
   shadow.getElementById('focus').addEventListener('click', () => {
