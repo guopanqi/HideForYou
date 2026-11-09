@@ -2,7 +2,7 @@
 
 A lightweight userscript for a cleaner X (formerly Twitter) experience on mobile and desktop browsers.
 
-HideForYou prioritizes the **Following** timeline and helps remove distractions, including **For You**, suggested accounts, trending topics, news cards, sports scorecards, and other sidebar recommendations. The search box remains available.
+HideForYou prioritizes the **Following** timeline and helps remove distractions, including **For You**, suggested accounts, trending topics, news cards, sports scorecards, and other sidebar recommendations. The desktop right sidebar has separate controls for search and recommendations. Search is visible by default.
 
 ## Install
 
@@ -13,7 +13,7 @@ Open [hide-for-you.user.js](https://raw.githubusercontent.com/guopanqi/HideForYo
 
 ## Settings
 
-Use **HideForYou settings** in X's navigation. Mobile and desktop layouts differ, so the menu entry may require updates when X changes its interface. A fallback settings URL is [x.com/home#xclean-settings](https://x.com/home#xclean-settings).
+Open **HideForYou settings** below **Settings and privacy** in X's navigation. Mobile and desktop layouts differ, so the menu entry may require updates when X changes its interface. A fallback settings URL is [x.com/home#xclean-settings](https://x.com/home#xclean-settings).
 
 Settings are stored locally in the browser. No account credentials are collected or transmitted by this script.
 
@@ -21,11 +21,15 @@ Settings are stored locally in the browser. No account credentials are collected
 
 The userscript declares `@updateURL` and `@downloadURL` pointing to this repository. Update-check behavior depends on your userscript manager.
 
-## Compatibility
+## Compatibility (beta)
 
-Designed for X's mobile and desktop web interfaces. X changes its DOM frequently, so some filters may occasionally stop working. This is an independent community script and is not affiliated with X.
+Designed for X's mobile and desktop web interfaces. This is a beta release. The settings entry and filtering behavior still need verification on live mobile and desktop layouts. X changes its DOM frequently, so some filters may occasionally stop working. This is an independent community script and is not affiliated with X.
 
 ## Source
 
 - [Userscript](./hide-for-you.user.js)
 - [Update metadata](./hide-for-you.meta.js)
+
+## License
+
+[MIT](./LICENSE)
