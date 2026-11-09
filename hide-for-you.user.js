@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      2.8.0
+// @version      2.9.0
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -20,14 +20,15 @@
   const defaults = {
     following: true, forYou: true, suggestions: true,
     trends: true, grok: true, premium: true,
-    explore: false, metrics: false, sports: true, rightRecommendations: true, paused: false
+    explore: false, metrics: false, sports: true, rightRecommendations: true, sidebarSearch: false, paused: false
   };
   const labels = {
     following: 'Prefer Following', forYou: 'Hide For You',
     suggestions: 'Hide Who to Follow', trends: 'Hide Trends',
     grok: 'Hide Grok', premium: 'Hide Premium promos',
     explore: 'Hide Explore', metrics: 'Hide engagement buttons',
-    sports: 'Hide sports scorecards', rightRecommendations: 'Hide sidebar recommendations (keep search)'
+    sports: 'Hide sports scorecards', rightRecommendations: 'Hide right-side recommendations',
+    sidebarSearch: 'Hide right-side search'
   };
   let prefs = { ...defaults };
   try {
@@ -153,41 +154,61 @@
           toggle(box, prefs[category]);
       });
 
-    // Hide the recommendation column content, but keep the search box.
-    // The X sidebar may contain a sticky search area followed by all
-    // recommendation cards. We hide the card siblings, never the sidebar.
+    // Manage the search and recommendations independently. Never hide
+    // an ancestor of the search field as part of recommendations filtering.
     document.querySelectorAll('[data-testid="sidebarColumn"]').forEach(sidebar => {
       const search = sidebar.querySelector(
-        '[data-testid="SearchBox_Search_Input"], form[role="search"], input[aria-label="Search query"]'
+        '[data-testid="SearchBox_Search_Input"],' +
+        'input[aria-label="Search query"],' +
+        'input[aria-label="Search"],' +
+        'form[role="search"] input, [role="search"] input'
       );
-      const searchBlock = search && search.closest('form,[role="search"]');
-      const isSearchAncestor = el => searchBlock && (el === searchBlock || el.contains(searchBlock));
-      const mainContent = sidebar.querySelector('[data-testid="sidebarColumn"] > div > div') ||
-        sidebar.firstElementChild;
-      // Prefer the nearest container with search + recommendation sections.
-      let container = searchBlock;
-      if (container) {
-        for (let i = 0; i < 7 && container.parentElement &&
-             container.parentElement !== sidebar; i++) {
-          if (container.parentElement.children.length > 1) break;
-          container = container.parentElement;
-        }
-        if (container.parentElement && container.parentElement !== sidebar) {
-          [...container.parentElement.children].forEach(child => {
-            if (child !== container && !isSearchAncestor(child)) {
-              toggle(child, prefs.rightRecommendations);
-            }
-          });
+      const searchForm = search && (
+        search.closest('form,[role="search"]') || search.parentElement
+      );
+      // Restore nodes the earlier version may have marked when necessary.
+      if (search) {
+        for (let n = search; n && n !== sidebar; n = n.parentElement) {
+          toggle(n, false);
         }
       }
-      // Independently match known recommendation sections as a fallback.
-      sidebar.querySelectorAll('[data-testid="trend"], [data-testid="UserCell"],' +
-        ' [data-testid="newsSidebar"], [aria-label="Timeline: Trending now"]')
-        .forEach(el => {
-          const block = el.closest('section,[data-testid="cellInnerDiv"]');
-          if (block && !block.querySelector('[data-testid="tweet"]'))
-            toggle(block, prefs.rightRecommendations);
-        });
+      // Hide only the search's own wrapper if explicitly requested.
+      if (searchForm) {
+        const searchWrapper = searchForm.parentElement &&
+          searchForm.parentElement !== sidebar &&
+          searchForm.parentElement.querySelectorAll('input').length === 1 &&
+          searchForm.parentElement.textContent.trim().length < 100
+            ? searchForm.parentElement : searchForm;
+        toggle(searchWrapper, prefs.sidebarSearch);
+      }
+      if (search) {
+        // At every level of the search's ancestor chain, remove the
+        // *other* branches. This keeps the full search hierarchy intact.
+        for (let current = search; current && current.parentElement &&
+             current !== sidebar; current = current.parentElement) {
+          const parent = current.parentElement;
+          if (!sidebar.contains(parent)) break;
+          for (const sibling of parent.children) {
+            if (sibling === current || sibling.contains(search)) continue;
+            // Never hide a navigation or extra input/control area.
+            if (sibling.querySelector('input,form[role="search"]')) continue;
+            const looksLikeContent = sibling.textContent.trim().length > 15 ||
+              sibling.querySelector('section,[data-testid="trend"],[data-testid="UserCell"]');
+            if (looksLikeContent) toggle(sibling, prefs.rightRecommendations);
+          }
+        }
+      }
+      // A missing search box must not cause the whole column to vanish.
+      sidebar.querySelectorAll(
+        '[data-testid="trend"],[data-testid="newsSidebar"],' +
+        '[aria-label="Timeline: Trending now"]'
+      ).forEach(el => {
+        const section = el.closest('section,[data-testid="cellInnerDiv"]');
+        if (section && (!search || !section.contains(search)) &&
+            !section.querySelector('[data-testid="tweet"]')) {
+          toggle(section, prefs.rightRecommendations);
+        }
+      });
     });
     // Sports scorecards: match a contained NFL/NBA/etc. module,
     // not the user's own posts or search results.
@@ -209,7 +230,7 @@
             node.querySelector('button,[role="button"]')) candidate = node;
         if (t.length >= 1800) break;
       }
-      if (candidate) toggle(candidate, prefs.sports);
+      if (candidate && !candidate.querySelector('input[aria-label="Search query"], [data-testid="SearchBox_Search_Input"]')) toggle(candidate, prefs.sports);
     });
     document.querySelectorAll('[data-testid="like"],[data-testid="unlike"],[data-testid="retweet"],[data-testid="unretweet"]')
       .forEach(el => toggle(el, prefs.metrics));
@@ -246,7 +267,7 @@
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
       <div class="top"><h3>HideForYou · Settings</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p>Mobile & desktop · Saved in this browser · v2.7</p>
+      <p>Mobile & desktop · Saved in this browser · v2.9</p>
       <div id="options"></div>
       <div class="actions">
         <button id="focus">Focus mode</button>
