@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      3.0.1
+// @version      3.1.0
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -273,7 +273,7 @@
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
       <div class="top"><h3>HideForYou · Settings</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p>Mobile & desktop · Saved in this browser · v3.0.1</p>
+      <p>Mobile & desktop · Saved in this browser · v3.1.1</p>
       <div id="options"></div>
       <div class="actions">
         <button id="focus">Focus mode</button>
@@ -294,33 +294,31 @@
     if (event.key === 'Escape' && open) setOpen(false);
   });
 
-  // Insert only after X's own "Settings and privacy" menu item.
-  // Never attach anything to the mobile bottom tab bar or primary nav.
+  // Keep HideForYou in the same vertical menu list, immediately below
+  // the native Settings and privacy row. Never inject into the bottom tab bar.
   function insertSettingsLink() {
-    // Remove any links accidentally left by an earlier UI version.
     document.querySelectorAll('[data-hideforyou-settings]').forEach(el => {
-      if (el.getAttribute('data-hideforyou-version') !== '3') el.remove();
+      if (el.getAttribute('data-hideforyou-version') !== '3.1') el.remove();
     });
 
-    const validSettings = el => {
+    const isSettings = el => {
       if (el.closest('#xclean-root,[data-testid="AppTabBar"],[role="tablist"]')) return false;
       if (el.closest('[data-hideforyou-settings]')) return false;
-      const text = normalize(el.textContent);
-      let href = '';
+      const label = normalize(el.textContent);
+      let pathname = '';
       if (el.tagName === 'A') {
-        try { href = new URL(el.href).pathname; } catch (_) {}
+        try { pathname = new URL(el.href).pathname; } catch (_) {}
       }
-      return (href === '/settings' || href === '/settings/') ||
-        /^(settings and privacy|settings & privacy|设置和隐私|設定和隱私|設定與隱私)$/.test(text);
+      return pathname === '/settings' || pathname === '/settings/' ||
+        /^(settings and privacy|settings & privacy|设置和隐私|設定和隱私|設定與隱私)$/.test(label);
     };
-    const items = [...document.querySelectorAll(
-      'a[href], [role="menuitem"], [role="button"], button'
-    )].filter(validSettings);
 
-    for (const original of items) {
-      // Prefer the exact settings row, including its existing icon, spacing,
-      // fonts, hover/active styling and responsive classes.
-      if (original.nextElementSibling?.matches('[data-hideforyou-settings]')) continue;
+    for (const original of document.querySelectorAll(
+      'a[href], [role="menuitem"], [role="button"], button'
+    )) {
+      if (!isSettings(original) || !original.parentElement) continue;
+      const parent = original.parentElement;
+      if (parent.querySelector(':scope > [data-hideforyou-settings]')) continue;
       const clone = original.cloneNode(true);
       clone.removeAttribute('href');
       clone.removeAttribute('aria-expanded');
@@ -328,14 +326,17 @@
       clone.removeAttribute('id');
       clone.removeAttribute('data-testid');
       clone.setAttribute('data-hideforyou-settings', 'true');
-      clone.setAttribute('data-hideforyou-version', '3');
+      clone.setAttribute('data-hideforyou-version', '3.1');
       clone.setAttribute('aria-label', 'HideForYou settings');
       clone.setAttribute('role', 'button');
       clone.setAttribute('tabindex', '0');
-      // Replace only the original label, retaining all X-native wrappers.
+      clone.querySelectorAll('[id],[href],[data-testid]').forEach(child => {
+        child.removeAttribute('id');
+        child.removeAttribute('href');
+        child.removeAttribute('data-testid');
+      });
       const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
-      let node;
-      let replaced = false;
+      let node, replaced = false;
       while ((node = walker.nextNode())) {
         const value = node.nodeValue.trim();
         if (value && /settings|设置|設定/i.test(value)) {
@@ -345,11 +346,10 @@
         }
       }
       if (!replaced) {
-        const span = document.createElement('span');
-        span.textContent = 'HideForYou settings';
-        clone.append(span);
+        const label = document.createElement('span');
+        label.textContent = 'HideForYou settings';
+        clone.append(label);
       }
-      // Prevent the cloned X menu item's default routing and accordion action.
       const openSettings = event => {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -360,6 +360,20 @@
       clone.addEventListener('keydown', event => {
         if (event.key === 'Enter' || event.key === ' ') openSettings(event);
       }, true);
+
+      // Keep native typography and icon, but enforce a vertical full-width
+      // layout instead of placing the cloned entry into a second column.
+      parent.setAttribute('data-hideforyou-menu-list', 'true');
+      parent.style.setProperty('display', 'flex', 'important');
+      parent.style.setProperty('flex-direction', 'column', 'important');
+      parent.style.setProperty('align-items', 'stretch', 'important');
+      parent.style.setProperty('flex-wrap', 'nowrap', 'important');
+      for (const row of [original, clone]) {
+        row.style.setProperty('width', '100%', 'important');
+        row.style.setProperty('max-width', '100%', 'important');
+        row.style.setProperty('flex', '0 0 auto', 'important');
+        row.style.setProperty('box-sizing', 'border-box', 'important');
+      }
       original.insertAdjacentElement('afterend', clone);
     }
   }
