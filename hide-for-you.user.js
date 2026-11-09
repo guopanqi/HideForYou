@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      3.2.0
+// @version      3.3.0
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -225,42 +225,63 @@
       button{cursor:pointer;font:inherit}
       #backdrop{position:absolute;inset:0;background:#0008;pointer-events:auto}
       #panel{position:absolute;right:12px;top:50%;transform:translateY(-50%);
-        width:min(350px,calc(100vw - 24px));max-height:85vh;overflow:auto;
-        background:#17212e;color:white;border:1px solid #485a6e;
-        border-radius:16px;padding:17px;pointer-events:auto;
+        width:min(410px,calc(100vw - 24px));max-height:85vh;overflow:auto;
+        background:#17212e;color:#f4f7fa;border:1px solid #485a6e;
+        border-radius:18px;padding:18px;pointer-events:auto;
         font:14px -apple-system,BlinkMacSystemFont,sans-serif;
         box-shadow:0 8px 32px #0008}
-      h3{margin:0 0 4px;font-size:17px}
-      .group-heading{margin:17px 0 3px;color:#aabdc9;font-size:11px;
-        font-weight:700;text-transform:uppercase;letter-spacing:.09em}
-      #options section:first-child .group-heading{margin-top:8px}
-      p{margin:0 0 12px;color:#b3c2cd;font-size:12px}
-      .top{display:flex;justify-content:space-between;align-items:center}
-      #close{border:0;color:#fff;background:transparent;font-size:24px;padding:0 4px}
-      label{display:flex;align-items:center;justify-content:space-between;
-        border-bottom:1px solid #ffffff18;padding:9px 0;gap:10px}
-      input{width:19px;height:19px;accent-color:#82b7e7}
-      .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
-      .actions button.active{border-color:#9acbf1;background:#355572}
-      .mode-status{color:#aebeca;font-size:12px;margin:8px 0}
-      .group-note{font-size:11px;color:#93a6b6;margin:0 0 6px}
-      .actions button{background:#283b4e;border:1px solid #5c7286;color:white;
-        border-radius:8px;padding:10px 4px;font-size:12px}
-      #pause{grid-column:span 2}
+      .top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+      h3{font-size:19px;margin:0;font-weight:700}
+      #close{border:0;color:inherit;background:transparent;font-size:26px;padding:0 4px}
+      .subtitle{color:#aebbc7;font-size:12px;margin:4px 0 16px}
+      #modes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+      .mode{display:flex;flex-direction:column;gap:6px;align-items:stretch;
+        min-width:0;text-align:left;border:1px solid #536477;border-radius:12px;
+        padding:13px;background:transparent;color:inherit;min-height:110px}
+      .mode.active{border:2px solid #91bde4;background:#273a4c;padding:12px}
+      .mode-top{display:flex;align-items:center;justify-content:space-between}
+      .mode-icon{font-size:19px;color:#c2d5e6}
+      .selected{color:#a7d3f6;font-weight:700;font-size:16px;visibility:hidden}
+      .mode.active .selected{visibility:visible}
+      .mode-name{font-weight:700;font-size:14px}
+      .mode-description{font-size:12px;color:#adc0ce;line-height:1.4}
+      #mode-status{min-height:18px;font-size:12px;color:#aebeca;margin:10px 0 2px}
+      .section{border-top:1px solid #405061;margin-top:14px;padding-top:13px}
+      .section-head{display:flex;justify-content:space-between;align-items:baseline;
+        gap:8px;margin-bottom:6px}
+      .group-heading{color:#bac8d4;font-size:11px;letter-spacing:.06em;
+        font-weight:700;margin:0}
+      .group-note{color:#91a1af;font-size:11px;margin:0;text-align:right}
+      .option{display:flex;align-items:center;justify-content:space-between;
+        gap:12px;padding:9px 0;min-height:39px;cursor:pointer}
+      .option span{flex:1;min-width:0}
+      .option input{width:19px;height:19px;flex-shrink:0;accent-color:#82b7e7}
+      .actions{border-top:1px solid #405061;margin-top:16px;padding-top:15px}
+      #pause{display:block;width:100%;border:1px solid #63788e;border-radius:9px;
+        padding:10px;background:transparent;color:inherit;font-size:13px}
+      @media(max-width:360px){#panel{padding:14px}.mode{padding:10px}.mode.active{padding:9px}}
     </style>
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
-      <div class="top"><h3>HideForYou · Settings</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p>Mobile & desktop · Saved in this browser · v3.2</p>
-      <div id="options"></div>
-      <div class="actions">
-        <button id="light" type="button">Following Only</button>
-        <button id="focus" type="button">Focus</button>
+      <div class="top"><h3>HideForYou</h3><button id="close" aria-label="Close settings">×</button></div>
+      <p class="subtitle">Settings · Saved in this browser · v3.3</p>
+      <div id="modes">
+        <button id="light" class="mode" type="button" aria-pressed="false">
+          <span class="mode-top"><span class="mode-icon" aria-hidden="true">◎</span><span class="selected" aria-hidden="true">✓</span></span>
+          <span class="mode-name">Following Only</span>
+          <span class="mode-description">Hide algorithmic recommendations.</span>
+        </button>
+        <button id="focus" class="mode" type="button" aria-pressed="false">
+          <span class="mode-top"><span class="mode-icon" aria-hidden="true">◈</span><span class="selected" aria-hidden="true">✓</span></span>
+          <span class="mode-name">Focus</span>
+          <span class="mode-description">Remove extra distractions.</span>
+        </button>
       </div>
-      <div id="mode-status" class="mode-status"></div>
+      <div id="mode-status" role="status"></div>
+      <div id="options"></div>
       <div class="actions"><button id="pause" type="button">Pause filtering</button></div>
     </div>`;
-
+  
   let open = false;
   const setOpen = value => {
     open = value;
@@ -370,16 +391,20 @@
     container.replaceChildren();
     for (const group of groups) {
       const section = document.createElement('section');
+      section.className = 'section';
+      const head = document.createElement('div');
+      head.className = 'section-head';
       const heading = document.createElement('h4');
-      heading.textContent = group.title;
+      heading.textContent = group.title.toUpperCase();
       heading.className = 'group-heading';
-      section.append(heading);
-      const note = document.createElement('p');
+      const note = document.createElement('span');
       note.className = 'group-note';
       note.textContent = group.note;
-      section.append(note);
+      head.append(heading, note);
+      section.append(head);
       for (const key of group.keys) {
         const row = document.createElement('label');
+        row.className = 'option';
         const name = document.createElement('span');
         name.textContent = labels[key];
         const checkbox = document.createElement('input');
@@ -402,10 +427,9 @@
       button.setAttribute('aria-pressed', String(mode === value));
     }
     shadow.getElementById('mode-status').textContent =
-      mode === 'custom' ? 'Custom settings' :
-      mode === 'focus' ? 'Focus · Fewer distractions' :
-      'Following Only · No algorithmic recommendations';
-    shadow.getElementById('pause').textContent = prefs.paused ? 'Resume filtering' : 'Pause filtering';
+      mode === 'custom' ? 'Custom configuration' : '';
+    shadow.getElementById('pause').textContent =
+      prefs.paused ? 'Resume filtering' : 'Pause filtering';
   }
   shadow.getElementById('focus').addEventListener('click', () => {
     prefs = { ...FOCUS, paused: false };
