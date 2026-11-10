@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      3.3.1
+// @version      3.3.2
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -154,68 +154,105 @@
         (prefs.explore && path === '/explore');
       toggle(a, hide);
     });
-    // Search dropdowns are interactive results, NOT recommendations.
-    // Only hide recognized standalone sidebar cards; never infer that
-    // every sibling of the search box is a recommendation.
+    // The desktop right column consists of search UI and persistent
+    // recommendation branches. Search dropdowns are transient overlays.
+    // Hide persistent branches, NOT a whole container that holds search.
     document.querySelectorAll('[data-testid="sidebarColumn"]').forEach(sidebar => {
-      // Undo old broad hiding rules on every pass. This also restores Recent
-      // search results previously hidden by the earlier script versions.
-      sidebar.querySelectorAll('[data-xclean-hidden]').forEach(el => toggle(el, false));
-
       const search = sidebar.querySelector(
         '[data-testid="SearchBox_Search_Input"],' +
         'input[aria-label="Search query"],input[aria-label="Search"],' +
         'form[role="search"] input,[role="search"] input'
       );
-      const searchForm = search && (
-        search.closest('form,[role="search"]') || search.parentElement
-      );
-      if (searchForm) {
-        // Search is controlled independently and defaults to visible.
-        toggle(searchForm, prefs.sidebarSearch);
+
+      // Never broaden recommendation hiding to the whole sidebar.
+      // If X changes the search markup, fail open instead.
+      const tracked = sidebar.querySelectorAll('[data-hideforyou-sidebar-recommendation]');
+      const showTracked = () => {
+        tracked.forEach(el => {
+          el.removeAttribute('data-hideforyou-sidebar-recommendation');
+          toggle(el, false);
+        });
+      };
+      if (!search) {
+        showTracked();
+        return;
       }
 
-      const headings = [
-        'who to follow', 'trends for you', "what's happening",
-        'what’s happening', 'today’s news', "today's news",
-        'today’s stories', "today's stories", 'recommended',
-        'you might like', 'subscribe to premium',
-        '推荐关注', '有什么新鲜事', '热门趋势',
-        'nfl', 'nba', 'mlb', 'nhl', 'ncaa', 'wnba', 'mls',
-        'premier league'
-      ];
-      const hasSearchUI = el => !!el.querySelector(
-        'input,form[role="search"],[role="combobox"]'
-      );
-      const isSearchPopup = el => !!el.closest(
-        '[role="listbox"],[role="dialog"],' +
-        '[data-testid*="typeahead"],[data-testid*="Typeahead"]'
-      );
+      // Search is a separate user-controlled setting.
+      const form = search.closest('form,[role="search"]') || search.parentElement;
+      if (form) toggle(form, prefs.sidebarSearch);
 
-      sidebar.querySelectorAll('h2,h3,[role="heading"]').forEach(heading => {
-        if (isSearchPopup(heading)) return;
-        const label = normalize(heading.textContent);
-        if (!headings.some(term => label === term || label.startsWith(term + ' '))) return;
-        // Do not classify "Recent" or account/search results as sidebar cards.
-        let target = heading.closest('section');
-        if (!target || target === sidebar || hasSearchUI(target)) {
-          // X sometimes builds cards from plain div wrappers.
-          target = heading.parentElement;
-          for (let depth = 0; target && depth < 5; depth++, target = target.parentElement) {
-            if (target === sidebar || hasSearchUI(target) ||
-                target.querySelector('[data-testid="tweet"]')) {
-              target = null;
-              break;
+      // The Recent/search suggestions dropdown can be a sibling of the input
+      // inside X's search overlay. Temporarily unhide recommendation branches
+      // while the search is in use so we never suppress these results.
+      const searchActive = document.activeElement === search ||
+        search.contains(document.activeElement) ||
+        !!sidebar.querySelector(
+          '[data-testid*="typeaheadResult"],[data-testid*="TypeaheadResult"],' +
+          '[role="listbox"] [role="option"]'
+        );
+      if (!prefs.rightRecommendations || searchActive) {
+        showTracked();
+        return;
+      }
+
+      const isSearchPopup = el => !!(
+        el.matches('[role="listbox"],[role="dialog"],[role="combobox"]') ||
+        el.querySelector(
+          '[role="listbox"],[role="combobox"],' +
+          '[data-testid*="typeaheadResult"],[data-testid*="TypeaheadResult"]'
+        ) ||
+        el.closest('[role="listbox"],[role="dialog"]')
+      );
+      const isFooter = el => {
+        const content = (el.textContent || '').trim();
+        return /\bTerms\b/.test(content) &&
+          /\bPrivacy\b/.test(content) &&
+          /\bCookies\b/.test(content);
+      };
+
+      // Find the non-search branches at every level of the search's
+      // ancestor path. This handles X cards including untitled skeletons.
+      const candidates = new Set();
+      const searchBounds = search.getBoundingClientRect();
+      let branch = search;
+      while (branch && branch !== sidebar && branch.parentElement) {
+        const parent = branch.parentElement;
+        for (const sibling of parent.children) {
+          if (sibling === branch || sibling.contains(search)) continue;
+          if (sibling.matches('nav,[role="navigation"]') ||
+              sibling.querySelector('input,form[role="search"]') ||
+              isSearchPopup(sibling)) continue;
+          const bounds = sibling.getBoundingClientRect();
+          // The minimum size excludes icons and decorative search controls.
+          // Persistent cards are positioned below the search input.
+          if (bounds.height < 42 || bounds.width < 90 ||
+              bounds.top < searchBounds.bottom - 12) continue;
+          if (isFooter(sibling)) {
+            // Keep X's legal footer, but hide recommendation cards that
+            // share a wrapper with it.
+            for (const child of sibling.children) {
+              if (!isFooter(child) && !isSearchPopup(child) &&
+                  child.getBoundingClientRect().height >= 42 &&
+                  !child.querySelector('input')) candidates.add(child);
             }
-            if (target.querySelectorAll('h2,h3,[role="heading"]').length <= 2 &&
-                target.textContent.trim().length >= 20 &&
-                target.textContent.trim().length < 1800 &&
-                target.children.length > 1) break;
+          } else {
+            candidates.add(sibling);
           }
         }
-        if (!target || !sidebar.contains(target) || hasSearchUI(target) ||
-            target.querySelector('[data-testid="tweet"]') || isSearchPopup(target)) return;
-        toggle(target, prefs.rightRecommendations);
+        branch = parent;
+      }
+
+      // Remove flags from nodes that no longer qualify.
+      tracked.forEach(el => {
+        if (!candidates.has(el)) {
+          el.removeAttribute('data-hideforyou-sidebar-recommendation');
+          toggle(el, false);
+        }
+      });
+      candidates.forEach(el => {
+        el.setAttribute('data-hideforyou-sidebar-recommendation','true');
+        toggle(el, true);
       });
     });
     document.querySelectorAll('[data-testid="like"],[data-testid="unlike"],[data-testid="retweet"],[data-testid="unretweet"]')
@@ -272,7 +309,7 @@
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
       <div class="top"><h3>HideForYou</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p class="subtitle">Settings · Saved in this browser · v3.3.1</p>
+      <p class="subtitle">Settings · Saved in this browser · v3.3.2</p>
       <div id="modes">
         <button id="light" class="mode" type="button" aria-pressed="false">
           <span class="mode-top"><span class="mode-icon" aria-hidden="true">◎</span><span class="selected" aria-hidden="true">✓</span></span>
