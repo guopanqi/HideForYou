@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      3.3.3
+// @version      3.3.4
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -182,17 +182,35 @@
       const form = search.closest('form,[role="search"]') || search.parentElement;
       if (form) toggle(form, prefs.sidebarSearch);
 
-      // The Recent/search suggestions dropdown can be a sibling of the input
-      // inside X's search overlay. Temporarily unhide recommendation branches
-      // while the search is in use so we never suppress these results.
+      // Search and recommendations are separate UI regions. Opening Recent
+      // must NOT reveal persistent sidebar recommendations. Freeze the set
+      // of already hidden recommendation branches while search is active:
+      // newly mounted search suggestions are not classified as cards.
       const searchActive = document.activeElement === search ||
         search.contains(document.activeElement) ||
         !!sidebar.querySelector(
           '[data-testid*="typeaheadResult"],[data-testid*="TypeaheadResult"],' +
           '[role="listbox"] [role="option"]'
         );
-      if (!prefs.rightRecommendations || searchActive) {
+      if (!prefs.rightRecommendations) {
         showTracked();
+        return;
+      }
+      if (searchActive) {
+        tracked.forEach(el => {
+          // A search popup must never be hidden with its parent branch.
+          const containsSearchPopup = !!el.querySelector(
+            '[data-testid="typeaheadDropdownWrapped"],' +
+            '[data-testid*="typeaheadResult"],[data-testid*="TypeaheadResult"],' +
+            '[role="listbox"]'
+          );
+          if (containsSearchPopup) {
+            el.removeAttribute('data-hideforyou-sidebar-recommendation');
+            toggle(el, false);
+          } else {
+            toggle(el, true);
+          }
+        });
         return;
       }
 
@@ -313,7 +331,7 @@
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
       <div class="top"><h3>HideForYou</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p class="subtitle">Settings · Saved in this browser · v3.3.3</p>
+      <p class="subtitle">Settings · Saved in this browser · v3.3.4</p>
       <div id="modes">
         <button id="light" class="mode" type="button" aria-pressed="false">
           <span class="mode-top"><span class="mode-icon" aria-hidden="true">◎</span><span class="selected" aria-hidden="true">✓</span></span>
