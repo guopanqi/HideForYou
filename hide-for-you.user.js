@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      3.3.0
+// @version      3.3.1
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -154,60 +154,68 @@
         (prefs.explore && path === '/explore');
       toggle(a, hide);
     });
-    // Manage the search and recommendations independently. Never hide
-    // an ancestor of the search field as part of recommendations filtering.
+    // Search dropdowns are interactive results, NOT recommendations.
+    // Only hide recognized standalone sidebar cards; never infer that
+    // every sibling of the search box is a recommendation.
     document.querySelectorAll('[data-testid="sidebarColumn"]').forEach(sidebar => {
+      // Undo old broad hiding rules on every pass. This also restores Recent
+      // search results previously hidden by the earlier script versions.
+      sidebar.querySelectorAll('[data-xclean-hidden]').forEach(el => toggle(el, false));
+
       const search = sidebar.querySelector(
         '[data-testid="SearchBox_Search_Input"],' +
-        'input[aria-label="Search query"],' +
-        'input[aria-label="Search"],' +
-        'form[role="search"] input, [role="search"] input'
+        'input[aria-label="Search query"],input[aria-label="Search"],' +
+        'form[role="search"] input,[role="search"] input'
       );
       const searchForm = search && (
         search.closest('form,[role="search"]') || search.parentElement
       );
-      // Restore nodes the earlier version may have marked when necessary.
-      if (search) {
-        for (let n = search; n && n !== sidebar; n = n.parentElement) {
-          toggle(n, false);
-        }
-      }
-      // Hide only the search's own wrapper if explicitly requested.
       if (searchForm) {
-        const searchWrapper = searchForm.parentElement &&
-          searchForm.parentElement !== sidebar &&
-          searchForm.parentElement.querySelectorAll('input').length === 1 &&
-          searchForm.parentElement.textContent.trim().length < 100
-            ? searchForm.parentElement : searchForm;
-        toggle(searchWrapper, prefs.sidebarSearch);
+        // Search is controlled independently and defaults to visible.
+        toggle(searchForm, prefs.sidebarSearch);
       }
-      if (search) {
-        // At every level of the search's ancestor chain, remove the
-        // *other* branches. This keeps the full search hierarchy intact.
-        for (let current = search; current && current.parentElement &&
-             current !== sidebar; current = current.parentElement) {
-          const parent = current.parentElement;
-          if (!sidebar.contains(parent)) break;
-          for (const sibling of parent.children) {
-            if (sibling === current || sibling.contains(search)) continue;
-            // Never hide a navigation or extra input/control area.
-            if (sibling.querySelector('input,form[role="search"]')) continue;
-            const looksLikeContent = sibling.textContent.trim().length > 15 ||
-              sibling.querySelector('section,[data-testid="trend"],[data-testid="UserCell"]');
-            if (looksLikeContent) toggle(sibling, prefs.rightRecommendations);
+
+      const headings = [
+        'who to follow', 'trends for you', "what's happening",
+        'what’s happening', 'today’s news', "today's news",
+        'today’s stories', "today's stories", 'recommended',
+        'you might like', 'subscribe to premium',
+        '推荐关注', '有什么新鲜事', '热门趋势',
+        'nfl', 'nba', 'mlb', 'nhl', 'ncaa', 'wnba', 'mls',
+        'premier league'
+      ];
+      const hasSearchUI = el => !!el.querySelector(
+        'input,form[role="search"],[role="combobox"]'
+      );
+      const isSearchPopup = el => !!el.closest(
+        '[role="listbox"],[role="dialog"],' +
+        '[data-testid*="typeahead"],[data-testid*="Typeahead"]'
+      );
+
+      sidebar.querySelectorAll('h2,h3,[role="heading"]').forEach(heading => {
+        if (isSearchPopup(heading)) return;
+        const label = normalize(heading.textContent);
+        if (!headings.some(term => label === term || label.startsWith(term + ' '))) return;
+        // Do not classify "Recent" or account/search results as sidebar cards.
+        let target = heading.closest('section');
+        if (!target || target === sidebar || hasSearchUI(target)) {
+          // X sometimes builds cards from plain div wrappers.
+          target = heading.parentElement;
+          for (let depth = 0; target && depth < 5; depth++, target = target.parentElement) {
+            if (target === sidebar || hasSearchUI(target) ||
+                target.querySelector('[data-testid="tweet"]')) {
+              target = null;
+              break;
+            }
+            if (target.querySelectorAll('h2,h3,[role="heading"]').length <= 2 &&
+                target.textContent.trim().length >= 20 &&
+                target.textContent.trim().length < 1800 &&
+                target.children.length > 1) break;
           }
         }
-      }
-      // A missing search box must not cause the whole column to vanish.
-      sidebar.querySelectorAll(
-        '[data-testid="trend"],[data-testid="newsSidebar"],' +
-        '[aria-label="Timeline: Trending now"]'
-      ).forEach(el => {
-        const section = el.closest('section,[data-testid="cellInnerDiv"]');
-        if (section && (!search || !section.contains(search)) &&
-            !section.querySelector('[data-testid="tweet"]')) {
-          toggle(section, prefs.rightRecommendations);
-        }
+        if (!target || !sidebar.contains(target) || hasSearchUI(target) ||
+            target.querySelector('[data-testid="tweet"]') || isSearchPopup(target)) return;
+        toggle(target, prefs.rightRecommendations);
       });
     });
     document.querySelectorAll('[data-testid="like"],[data-testid="unlike"],[data-testid="retweet"],[data-testid="unretweet"]')
@@ -264,7 +272,7 @@
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
       <div class="top"><h3>HideForYou</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p class="subtitle">Settings · Saved in this browser · v3.3</p>
+      <p class="subtitle">Settings · Saved in this browser · v3.3.1</p>
       <div id="modes">
         <button id="light" class="mode" type="button" aria-pressed="false">
           <span class="mode-top"><span class="mode-icon" aria-hidden="true">◎</span><span class="selected" aria-hidden="true">✓</span></span>
