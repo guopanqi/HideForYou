@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HideForYou
 // @namespace    https://github.com/guopanqi
-// @version      3.3.2
+// @version      3.3.3
 // @description  A cleaner X/Twitter experience on mobile and desktop browsers. Prioritize Following, hide For You and sidebar recommendations, and manage filters from the navigation menu.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -223,11 +223,14 @@
           if (sibling.matches('nav,[role="navigation"]') ||
               sibling.querySelector('input,form[role="search"]') ||
               isSearchPopup(sibling)) continue;
+          const alreadyHidden = sibling.hasAttribute('data-hideforyou-sidebar-recommendation');
           const bounds = sibling.getBoundingClientRect();
-          // The minimum size excludes icons and decorative search controls.
-          // Persistent cards are positioned below the search input.
-          if (bounds.height < 42 || bounds.width < 90 ||
-              bounds.top < searchBounds.bottom - 12) continue;
+          // Hidden cards report zero dimensions. Preserve previously hidden
+          // candidates; otherwise a MutationObserver can flip them visible.
+          const afterSearch = !!(branch.compareDocumentPosition(sibling) &
+            Node.DOCUMENT_POSITION_FOLLOWING);
+          if (!alreadyHidden && (!afterSearch ||
+              bounds.height < 42 || bounds.width < 90)) continue;
           if (isFooter(sibling)) {
             // Keep X's legal footer, but hide recommendation cards that
             // share a wrapper with it.
@@ -251,7 +254,8 @@
         }
       });
       candidates.forEach(el => {
-        el.setAttribute('data-hideforyou-sidebar-recommendation','true');
+        if (!el.hasAttribute('data-hideforyou-sidebar-recommendation'))
+          el.setAttribute('data-hideforyou-sidebar-recommendation','true');
         toggle(el, true);
       });
     });
@@ -309,7 +313,7 @@
     <div id="backdrop"></div>
     <div id="panel" role="dialog" aria-modal="true" aria-label="HideForYou settings">
       <div class="top"><h3>HideForYou</h3><button id="close" aria-label="Close settings">×</button></div>
-      <p class="subtitle">Settings · Saved in this browser · v3.3.2</p>
+      <p class="subtitle">Settings · Saved in this browser · v3.3.3</p>
       <div id="modes">
         <button id="light" class="mode" type="button" aria-pressed="false">
           <span class="mode-top"><span class="mode-icon" aria-hidden="true">◎</span><span class="selected" aria-hidden="true">✓</span></span>
